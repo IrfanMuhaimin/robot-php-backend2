@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parallel Task Manager (Pi & Unity Simulation) - HTTPS</title>
+    <style>
+        /* (CSS styles here for better presentation) */
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
+        h1, h2 { text-align: center; color: #333; }
+        .controls { display: flex; gap: 15px; margin-top: 20px; justify-content: center; margin-bottom: 30px; }
+        button { padding: 10px 20px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
+        #btn-task1 { background-color: #28a745; color: white; }
+        #btn-task2 { background-color: #007bff; color: white; }
+        button:hover { opacity: 0.9; }
+        #status_message { margin-top: 15px; text-align: center; font-weight: bold; }
+        #task_log_table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; }
+        #task_log_table th, #task_log_table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        #task_log_table th { background-color: #e9ecef; }
+        .pi-status, .unity-status { font-weight: bold; }
+        /* Style for the error message div created by JS */
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        /* 🟢 NEW CSS FOR WEBGL VIEWER */
+        #webgl-viewer-container {
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* Aspect ratio based height */
+            height: 550px; 
+            background-color: #000;
+        }
+        #webgl-viewer {
+            width: 100%;
+            height: 100%;
+            border: none; /* Crucial: removes default iframe border */
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Parallel Task Manager (Pi & Unity Simulation) 🤖🎮</h1>
+
+        <h2 style="margin-top: 0;">Robot Arm 3D Simulation</h2>
+        <div id="webgl-viewer-container">
+            <iframe 
+                id="webgl-viewer" 
+                src="./TheDilution2/index.html" 
+                title="Robot Arm WebGL Simulation"
+                allow="fullscreen"
+                sandbox="allow-scripts allow-same-origin">
+                Your browser does not support inline frames.
+            </iframe>
+        </div>
+        <div class="controls">
+            <button id="btn-task1" onclick="runTask('task1')">Run Task 1 (Robot Arm)</button>
+            <button id="btn-task2" onclick="runTask('task2')">Run Task 2 (Other)</button>
+        </div>
+
+        <p id="status_message"></p>
+
+        <h2>Task History & Status</h2>
+        <div id="log_table_container">
+            <table id="task_log_table">
+                <thead>
+                    <tr>
+                        <th rowspan="2">ID</th>
+                        <th rowspan="2">Task Name</th>
+                        <th rowspan="2">Start Time</th>
+                        <th colspan="2" style="background-color: #cce5ff;">Raspberry Pi (Physical)</th>
+                        <th colspan="2" style="background-color: #fff3cd;">Unity (Virtual)</th>
+                        <th rowspan="2">Details</th>
+                    </tr>
+                    <tr>
+                        <th style="background-color: #cce5ff;">Status</th>
+                        <th style="background-color: #cce5ff;">Dur. (s)</th>
+                        <th style="background-color: #fff3cd;">Status</th>
+                        <th style="background-color: #fff3cd;">Dur. (s)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://robot.thedilution.my/robotarm/api/'; // <<< UPDATED HTTPS DOMAIN
+        const messageElement = document.getElementById('status_message');
+
+        function runTask(taskName) {
+            messageElement.textContent = `Sending command to server: ${taskName}...`;
+
+            document.getElementById('btn-task1').disabled = true;
+            document.getElementById('btn-task2').disabled = true;
+
+            fetch(API_BASE_URL + 'trigger.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `task=${taskName}`
+            })
+            .then(response => response.text())
+            .then(data => {
+                const logId = parseInt(data);
+                if (isNaN(logId)) {
+                    messageElement.textContent = `❌ Error: Server returned non-numeric ID. ${data}`;
+                } else {
+                    messageElement.textContent = `✅ Success! Task ${taskName} triggered with ID ${logId}. Both clients should start.`;
+                }
+
+                document.getElementById('btn-task1').disabled = false;
+                document.getElementById('btn-task2').disabled = false;
+                fetchLog();
+            })
+            .catch(error => {
+                messageElement.textContent = `❌ Error sending command: ${error}. Check HTTPS/CORS.`;
+                document.getElementById('btn-task1').disabled = false;
+                document.getElementById('btn-task2').disabled = false;
+            });
+        }
+
+        function getStatusStyle(status) {
+            if (!status) return 'color: #6c757d;'; // Handle NULL/empty status
+            status = status.toUpperCase();
+            if (status.includes('RUNNING')) return 'color: #007bff;';
+            if (status === 'PENDING' || status === 'NULL') return 'color: #888;';
+            if (status === 'FINISHED') return 'color: #28a745;';
+            if (status.includes('ERROR') || status.includes('BROKEN')) return 'color: #dc3545;';
+            return 'color: #6c757d;';
+        }
+
+        // 🛠️ CORRECTED FUNCTION WITH NULL CHECKS AND ROBUST DOM ACCESS
+        function fetchLog() {
+            const tableElement = document.getElementById('task_log_table');
+            const logContainer = document.getElementById('log_table_container');
+
+            // 1. CRITICAL: Check if the HTML element exists (prevents reading 'getElementsByTagName' on null)
+            if (!tableElement) {
+                console.error("HTML table with ID 'task_log_table' not found.");
+                return;
+            }
+
+            const tbody = tableElement.getElementsByTagName('tbody')[0];
+
+            if (!tbody) {
+                console.error("Table body <tbody> element not found inside 'task_log_table'.");
+                return;
+            }
+
+            // Set a loading indicator while fetching
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6c757d;">Loading task history...</td></tr>';
+
+            // Clear any previous error messages
+            const existingError = logContainer.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+
+            fetch(API_BASE_URL + 'fetch_log.php', {cache: "no-store"})
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP Error ${response.status}: Failed to fetch log.`);
+                return response.json();
+            })
+            .then(logs => {
+                tbody.innerHTML = ''; // Clear loading message
+
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6c757d;">No task history recorded yet.</td></tr>';
+                    return;
+                }
+
+                logs.forEach(log => {
+                    const row = tbody.insertRow();
+
+                    row.insertCell().textContent = log.log_id || 'N/A';
+                    row.insertCell().textContent = log.task_name || 'N/A';
+                    row.insertCell().textContent = log.start_time || 'N/A';
+
+                    const piStatusCell = row.insertCell();
+                    piStatusCell.className = 'pi-status';
+                    piStatusCell.textContent = log.pi_status || 'NULL';
+                    piStatusCell.style = getStatusStyle(log.pi_status);
+
+                    row.insertCell().textContent = log.pi_duration_seconds !== null ? log.pi_duration_seconds + 's' : 'N/A';
+
+                    const unityStatusCell = row.insertCell();
+                    unityStatusCell.className = 'unity-status';
+                    unityStatusCell.textContent = log.unity_status || 'NULL';
+                    unityStatusCell.style = getStatusStyle(log.unity_status);
+
+                    row.insertCell().textContent = log.unity_duration_seconds !== null ? log.unity_duration_seconds + 's' : 'N/A';
+
+                    // Details/Message column
+                    row.insertCell().textContent = log.message || '';
+                });
+            })
+            .catch(error => {
+                // Display the error inside the log container
+                const errorMessage = `<p class="error-message">❌ Error loading log data: ${error.message}. Check browser console for network details.</p>`;
+                logContainer.insertAdjacentHTML('afterbegin', errorMessage);
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #dc3545;">Failed to load data. See error above.</td></tr>';
+            });
+        }
+
+        // 2. 🚨 CRITICAL FIX: Ensure the code runs only after the DOM is fully loaded.
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchLog();
+            setInterval(fetchLog, 5000);
+        });
+
+    </script>
+</body>
+</html>
