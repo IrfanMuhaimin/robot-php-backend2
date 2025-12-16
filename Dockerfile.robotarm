@@ -1,0 +1,23 @@
+# Use an official PHP image with an Apache server pre-configured
+FROM php:8.2-apache
+
+# Install the mysqli PHP extension required to connect to MySQL databases
+RUN docker-php-ext-install mysqli pdo pdo_mysql && docker-php-ext-enable mysqli
+
+# Enable Apache's rewrite module, which is necessary for the .htaccess file to work
+RUN a2enmod rewrite
+
+# Set the working directory to Apache's default web root
+WORKDIR /var/www/html
+
+# Copy the application files from the ROBOTARM directory into the container
+COPY . .
+
+# The ROBOTARM code writes to command.txt and status.txt.
+# We need to ensure the web server has permission to modify these files.
+# Giving write permissions to 'others' is a simple way to achieve this.
+RUN chmod o+w api/command.txt api/status.txt
+
+# Optional: If you encounter other permission issues, you can change the ownership
+# of all files to the web server's user (www-data).
+# RUN chown -R www-data:www-data /var/www/html

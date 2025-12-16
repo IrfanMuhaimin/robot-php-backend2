@@ -1,0 +1,30 @@
+services:
+  robotarm-server:
+    # Build the image using the Dockerfile we created
+    build:
+      context: .
+      dockerfile: Dockerfile.robotarm
+    container_name: robotarm_php_server
+    ports:
+      # Map port 8082 on your local machine to port 80 (Apache) in the container
+      - "8082:80"
+    volumes:
+      # Mount the local ROBOTARM code into the container.
+      # This allows your friend to make code changes without rebuilding the image.
+      - ./:/var/www/html
+    environment:
+      # These variables are passed to the PHP code (getenv functions)
+      # They connect to your existing database container.
+      DB_HOST: db               # 'db' is the service name of your MySQL container
+      DB_USER: ${DB_USER}       # Reads from your main project's .env file
+      DB_PASSWORD: ${DB_PASSWORD} # Reads from your main project's .env file
+      DB_NAME: ${DB_NAME}       # Reads from your main project's .env file
+    networks:
+      # Connect to the same shared network as your Node.js API and database
+      - shared-network
+    restart: unless-stopped
+
+networks:
+  # Declare that we are using a pre-existing external network
+  shared-network:
+    external: true

@@ -1,18 +1,22 @@
 <?php
-// api/trigger.php - Inserts a new task and returns its ID
-header("Access-Control-Allow-Origin: *"); // Allow request from anywhere
+header("Access-Control-Allow-Origin: *");
 header("Content-Type: text/plain");
 include 'db_config.php';
 
 if (isset($_POST['task'])) {
     $task_name = $conn->real_escape_string($_POST['task']);
-    $start_time = date('Y-m-d H:i:s');
     
-    // 🚨 CRITICAL FIX: Explicitly set the initial status to 'PENDING' for both clients.
+    // This will now be empty, which is correct
+    $message = isset($_POST['message']) ? $conn->real_escape_string($_POST['message']) : '';
+
+    // This will contain the recipe string
+    $material = isset($_POST['material']) ? $conn->real_escape_string($_POST['material']) : '';
+
+    $start_time = date('Y-m-d H:i:s');
     $initial_status = 'PENDING';
 
-    $sql = "INSERT INTO task_log (task_name, start_time, pi_status, unity_status)
-             VALUES ('$task_name', '$start_time', '$initial_status', '$initial_status')";
+    $sql = "INSERT INTO task_log (task_name, start_time, message, material, pi_status, unity_status)
+             VALUES ('$task_name', '$start_time', '$message', '$material', '$initial_status', '$initial_status')";
 
     if ($conn->query($sql) === TRUE) {
         $new_task_id = $conn->insert_id;
