@@ -1,4 +1,5 @@
 <?php
+// api/trigger.php
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: text/plain");
 include 'db_config.php';
